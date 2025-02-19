@@ -14,8 +14,16 @@ from confirmation_threshold import confirmation_threshold
 from maglab_crypto import MAGToken
 from threading import Event
 
-def conv_value(my_int):
-    return Value.INACTIVE if my_int == 0 or my_int == False or (type(my_int) == str and my_int.lower() == "off") else Value.ACTIVE
+def conv_value(myVal, trueVal, falseVal):
+    rValue = trueVal
+    if myVal == 0:
+      rValue = falseVal
+    if myVal == False:
+      rValue = falseVal
+    if type(myVal) == str:
+      if myVal.lower() == "off" or myVal.lower() == "false":
+        rValue = falseVal
+    return rValue
 
 class HDCDaemon(Daemon):
   def run(self):
@@ -144,8 +152,10 @@ class HDC(mqtt.Client):
         if commands:
           line_values = {}
           for name, value in commands.items():
+            if name == "temp_power":
+              self.log.debug(f"Temperature sensor power command received: {decoded}")
             if name in self.runtime.output_channels.keys():
-              output = conv_value(value)
+              output = conv_value(value, Value.ACTIVE, Value.INACTIVE)
               channel = self.runtime.output_channels[name]
               line_values.update({channel:output})
               self.runtime.output_values.update({name:output})
@@ -226,8 +236,8 @@ class HDC(mqtt.Client):
         self.log.debug("Configuring Output: " + str(acq.acObject))
         try:
             self.runtime.output_channels.update({acq.name : acq.acObject[0]})
-            self.runtime.output_values.update({acq.name : conv_value(acq.acObject[1])})
-            self._gpiodict.update({acq.acObject[0] : GPIO.LineSettings(direction=Direction.OUTPUT, output_value=conv_value(acq.acObject[1]))})
+            self.runtime.output_values.update({acq.name : conv_value(acq.acObject[1], Value.ACTIVE, Value.INACTIVE)})
+            self._gpiodict.update({acq.acObject[0] : GPIO.LineSettings(direction=Direction.OUTPUT, output_value=conv_value(acq.acObject[1], Value.ACTIVE, Value.INACTIVE))})
         except TypeError:
             self.runtime.output_channels.update({acq.name : acq.acObject})
             self.runtime.output_values.update({acq.name : Value.INACTIVE})
@@ -403,7 +413,7 @@ class HDC(mqtt.Client):
     if checks:
       self.notify('event', checks)
     else:
-      self.log.debug("Noting changed between timed io checks")
+      self.log.debug("Nothing changed between timed io checks")
   
   def run(self):
     self.log = logging.getLogger(__name__)
